@@ -1,0 +1,21 @@
+{
+  "name": "nt7_node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "diag": "tsx src/diag-client.ts"
+  },
+  "dependencies": {
+    "iconv-lite": "^0.7.2",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.21.0",
+    "typescript": "~5.4.5"
+  }
+}
