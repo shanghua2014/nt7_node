@@ -36,6 +36,8 @@ export interface BrPr {
     enNmL?: boolean;
     qNew?: boolean;
     qDet?: boolean;
+    /** 下行含「王者归来(NT.ULTIMATE)启动完毕」本段：前端应整页刷新 */
+    reloadPage?: boolean;
 }
 
 export interface BrEx {

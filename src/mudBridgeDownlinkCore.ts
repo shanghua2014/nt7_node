@@ -48,6 +48,11 @@ export const CE_CMD = 'closeeye';
 export const HB_PAT = /(?:\x1b)?\[1;36m老村长嘱咐道：/;
 export const HB_CMD = 'walk 村口';
 export const QUIT_ABANDON_PAT = /(?:\x1b)?\[1;37m您选择了放弃该账号/;
+/** 王者归来主程序启动完毕；仅本 TCP 段匹配（见 snapBr reloadPage），避免整缓冲长期命中反复刷新 */
+const NT_BOOT_GAP = '(?:\\x1b\\[[0-9;]*m|\\s)*';
+export const NT_ULTIMATE_BOOT_PAT = new RegExp(
+    `王者归来${NT_BOOT_GAP}\\(${NT_BOOT_GAP}NT\\.ULTIMATE${NT_BOOT_GAP}\\)${NT_BOOT_GAP}启动完毕`
+);
 
 const CX_BUF0 = '^(?:\\x1b\\[[0-9;]*m)*这个角色已经存在[，,]';
 const CX_NL = '(?:\\r\\n|\\r|\\n)(?:\\x1b\\[[0-9;]*m)*这个角色已经存在[，,]';
@@ -188,6 +193,8 @@ export function snapBr(decodedChunk: string, bufFull: string): BrPr {
     const qNew = !yn && !mf && Q_NEW_PAT.test(decodedChunk);
     const qDet = !yn && !mf && Q_DET_PAT.test(decodedChunk);
     const rematchPrompt = matchPromptRules(bufFull, REMATCH_PROMPT_RULES);
+    /** 仅当本段下行含启动完毕提示时为 true，供前端整页刷新 */
+    const reloadPage = NT_ULTIMATE_BOOT_PAT.test(decodedChunk);
 
     return {
         yn,
@@ -219,6 +226,7 @@ export function snapBr(decodedChunk: string, bufFull: string): BrPr {
         lgPwdL,
         enNmL,
         qNew,
-        qDet
+        qDet,
+        reloadPage
     };
 }
