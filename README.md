@@ -65,7 +65,7 @@ npm run dev
 后端统一在 `src/mudBridgeDownlinkCore.ts` 的规则表中配置，不要分散在各处手写匹配。
 
 - 通用匹配封装：`src/promptMatchPolicy.ts`
-- 当前规则表：`REMATCH_PROMPT_RULES`（如 `cfLv`、`d14`、`baiShi`、`baiWuBo`；`infT` 用整缓冲，不在此表）
+- 当前规则表：`REMATCH_PROMPT_RULES`（如 `cfLv`、`d14`、`baiShi`、`baiWuBo`、`zhaoCz`、`zhunCc`；`infT` 用整缓冲，不在此表）
 
 ### 接入步骤（后端）
 

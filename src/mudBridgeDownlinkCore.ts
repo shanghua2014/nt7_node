@@ -8,8 +8,6 @@ export const ALH_PAT = /(?:\x1b)?\[1;31mask lao/i;
 export const ALH_CMD = 'ask lao about here';
 export const WASH_PAT = /(?:\x1b)?\[2;37;0m指令格式：washto/i;
 export const WASH_CMD = 'washto 20 20 20 20';
-export const INF_PAT = /(?:\x1b)?\[1;31mask\s*lao\s*about\s*here /;
-export const INF_N = 12;
 /** 拜师：匹配下行红字前缀 `[1;31m要了解`（与 README 口令一致） */
 export const BAISHI_PAT = /(?:\x1b)?\[1;31m要了解/;
 /** 前端按 `;` 切分后逐条发送 */
@@ -18,6 +16,25 @@ export const BAISHI_CMD = 'ask lao about 107;ask lao about ok';
 export const BAIWUBO_PAT = /(?:\x1b)?\[1;33m你先去拜武伯/;
 /** 前端按 `;` 切分后逐条发送 */
 export const BAIWUBO_CMD = 'walk 练武场;bai wubo';
+/**
+ * 找村长（vsmud_vue README）：`[2;37;0m武伯决定收你`（后可接「为弟子」等，前缀匹配即可）
+ */
+export const ZHAOCZ_PAT = /(?:\x1b)?\[2;37;0m武伯决定收你/;
+/** 无 ANSI 时整缓冲兜底 */
+export const ZHAOCZ_PLAIN = /武伯决定收你/;
+/** 前端按 `;` 切分后逐条发送 */
+export const ZHAOCZ_CMD = 'w;w;ask cunzhang about ok';
+/** 准备出村：绿字 `[1;32m老村长点头`（旧） */
+export const ZHUNCC_PAT = /(?:\x1b)?\[1;32m老村长点头/;
+/** 青字 `[1;36m你完成了老村长交给你的 … ask cunzhang about 出村 准备出村` */
+export const ZHUNCC_PAT2 = /(?:\x1b)?\[1;36m你完成了老村长交给你的/;
+export const ZHUNCC_PAT2_LOOSE = /(?:\x1b)?\[[0-9;]*m你完成了老村长交给你的/;
+export const ZHUNCC_PAT_ANY = new RegExp(
+    `(?:${ZHUNCC_PAT.source})|(?:${ZHUNCC_PAT2.source})|(?:${ZHUNCC_PAT2_LOOSE.source})`
+);
+export const ZHUNCC_PLAIN = /老村长点头|你完成了老村长交给你的/;
+/** 前端按 `;` 切分后逐条发送 */
+export const ZHUNCC_CMD = 'ask cunzhang about 出村';
 /** 确认出村提示；缓冲内可多次命中，前端「确认出村」按钮随下行反复出现 */
 export const ASK_HUA_PAT = /(?:\x1b)?\[1;31m\s*ask\s*hua/i;
 export const LV_CONFIRM_CMD = 'ask hua about 出村';
@@ -58,13 +75,16 @@ const PN_2 = /(?:\x1b)?\[[0-9;]*m请再输入一次您的(?:密|密码)/;
  * 需要“再次匹配触发”的提示统一走规则表，后续新增同类按钮只需加一行配置。
  */
 const REMATCH_PROMPT_RULES: Record<
-    'cfLv' | 'd14' | 'baiShi' | 'baiWuBo',
+    'cfLv' | 'd14' | 'baiShi' | 'baiWuBo' | 'zhaoCz' | 'zhunCc',
     PromptRule
 > = {
     cfLv: { re: ASK_HUA_PAT, policy: 'tail' },
     d14: { re: D14_PAT, policy: 'tail' },
     baiShi: { re: BAISHI_PAT, policy: 'tail' },
-    baiWuBo: { re: BAIWUBO_PAT, policy: 'tail' }
+    baiWuBo: { re: BAIWUBO_PAT, policy: 'tail' },
+    zhaoCz: { re: ZHAOCZ_PAT, policy: 'full' },
+    /** 与 zhaoCz 同类：叙事句后常跟大段描述，勿仅用 tail 窗 */
+    zhunCc: { re: ZHUNCC_PAT_ANY, policy: 'full' }
 };
 
 const CARD_ORD = [
@@ -148,11 +168,6 @@ function pgTailOk(raw: string): boolean {
     return PG_UNF_PAT.test(lastFew);
 }
 
-export function infTopicCmd(index: number): string {
-    const n = Math.trunc(index);
-    return `ask lao about ${n}`;
-}
-
 export function mCx(raw: string): boolean {
     return CX_PAT.test(raw);
 }
@@ -181,10 +196,10 @@ export function snapBr(decodedChunk: string, bufFull: string): BrPr {
         chSel: chSelOk(bufFull),
         alh: ALH_PAT.test(bufFull),
         wash: WASH_PAT.test(bufFull),
-        /** 整缓冲匹配：避免 tail 窗导致未点「信息」也误判无提示 */
-        infT: INF_PAT.test(bufFull),
         baiShi: rematchPrompt.baiShi,
         baiWuBo: rematchPrompt.baiWuBo,
+        zhaoCz: rematchPrompt.zhaoCz || ZHAOCZ_PLAIN.test(bufFull),
+        zhunCc: rematchPrompt.zhunCc || ZHUNCC_PLAIN.test(bufFull),
         cfLv: rematchPrompt.cfLv,
         ky: KY_PAT.test(bufFull),
         d14: rematchPrompt.d14,

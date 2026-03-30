@@ -10,7 +10,8 @@ import { parseCurrentRoomNameFromMudBuffer } from './mud-room-title-parse.js';
 
 export type MudCharset = 'gb18030' | 'utf8';
 
-const BUF_MAX = 12000;
+/** 过小会把较早的任务提示裁掉，导致 snapBr（如 zhaoCz）长期为 false */
+const BUF_MAX = 100_000;
 
 function decChunk(buf: Buffer, charset: MudCharset): string {
     if (charset === 'utf8') return buf.toString('utf8');

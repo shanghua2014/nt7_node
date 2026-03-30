@@ -7,11 +7,14 @@ export interface BrPr {
     chSel: boolean;
     alh: boolean;
     wash: boolean;
-    infT: boolean;
-    /** 与「信息」同列显示逻辑：下行拜师提示 */
+    /** 下行拜师提示 */
     baiShi: boolean;
     /** 下行「你先去拜武伯」提示，与拜师同类 rematch */
     baiWuBo: boolean;
+    /** 下行 `[2;37;0m武伯决定收你…` 等：菜单「找村长」，rematch（见 vsmud_vue README） */
+    zhaoCz: boolean;
+    /** 下行「老村长点头」或「你完成了老村长交给你的」：菜单「准备出村」，rematch */
+    zhunCc: boolean;
     cfLv: boolean;
     ky: boolean;
     /** `[1;36m1. 直接`：菜单 1～4 数字 */
