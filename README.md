@@ -1,6 +1,6 @@
 # nt7_node
 
-浏览器无法直连原始 Telnet 时的 **WebSocket 网关**：接收 `vsmud_vue` 的握手 JSON，建立到 MUD 的 TCP；每条 TCP 下行发送一条 **`vsmud-control` 文本帧**，其中 **`mudText`** 为本段 **TCP 原始字节的 Base64**，并带 **`mudTextEnc":"base64"`**；同帧 **`charset`**（`gb18030` / `utf8`）供前端解码。另有 `prompts` / `exits` / `roomTitle`。不再另发 binary。
+浏览器无法直连原始 Telnet 时的 **WebSocket 网关**：接收 `vsmud_vue` 的握手 JSON，建立到 MUD 的 TCP；每条 TCP 下行发送一条 **`vsmud-control` 文本帧**，其中 **`mudText`** 为本段 **TCP 原始字节的 Base64**，并带 **`mudTextEnc":"base64"`**；同帧 **`charset":"utf8"`** 标明终端与网关均按 **UTF-8** 处理。另有 `prompts` / `exits` / `roomTitle`。不再另发 binary。
 
 ## 运行
 
@@ -21,7 +21,6 @@ npm start
   "connect": {
     "ip": "127.0.0.1",
     "port": "4000",
-    "charset": "gb18030",
     "wsPath": "/"
   }
 }

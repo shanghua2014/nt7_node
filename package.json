@@ -9,7 +9,6 @@
     "diag": "tsx src/diag-client.ts"
   },
   "dependencies": {
-    "iconv-lite": "^0.7.2",
     "ws": "^8.20.0"
   },
   "devDependencies": {

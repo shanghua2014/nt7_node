@@ -1,5 +1,13 @@
 /** 与 vsmud_vue 前端 common.BrPr 字段一致，供 vsmud-control JSON 使用 */
 
+/** mygiftd 下行元数据，由网关从缓冲解析 */
+export interface BrMyGiftTask {
+    /** 对应 gift_list 条目的「条件数值」 */
+    need: number;
+    /** 对应「达成条件」文案 */
+    title: string;
+}
+
 export interface BrPr {
     yn: boolean;
     mf: boolean;
@@ -38,6 +46,8 @@ export interface BrPr {
     qDet?: boolean;
     /** 下行含「王者归来(NT.ULTIMATE)启动完毕」本段：前端应整页刷新 */
     reloadPage?: boolean;
+    /** 当前辅助任务（mygift）快照：条件数值 + 达成条件标题 */
+    myGiftTask?: BrMyGiftTask;
 }
 
 export interface BrEx {

@@ -4,7 +4,7 @@
 import net from 'node:net';
 import { WebSocketServer, WebSocket } from 'ws';
 
-import { mkDlProc, type MudCharset } from './mud-bridge-control.js';
+import { mkDlProc } from './mud-bridge-control.js';
 
 const PORT = Number(process.env.MUD_GATEWAY_PORT || 8765);
 const DEBUG = process.env.NT7_GATEWAY_DEBUG === '1' || process.env.NT7_GATEWAY_DEBUG === 'true';
@@ -19,15 +19,8 @@ type ConnectPayload = {
     ip?: string;
     host?: string;
     port?: string | number;
-    charset?: string;
     wsPath?: string;
 };
-
-function normCharset(s: string | undefined): MudCharset {
-    const c = (s || 'gb18030').toLowerCase();
-    if (c === 'utf8' || c === 'utf-8') return 'utf8';
-    return 'gb18030';
-}
 
 function validatePort(p: string | number | undefined): number | null {
     const n = typeof p === 'string' ? parseInt(p, 10) : Number(p);
@@ -105,16 +98,14 @@ wss.on('connection', (ws) => {
         const c = m.connect as ConnectPayload;
         const host = String(c.ip ?? c.host ?? '').trim();
         const portNum = validatePort(c.port);
-        const charset = normCharset(typeof c.charset === 'string' ? c.charset : undefined);
-
         if (!host || portNum === null) {
             sendSessionJson(ws, { error: 'connect 中地址或端口无效' });
             return;
         }
 
-        proc = mkDlProc(charset);
+        proc = mkDlProc();
         phase = 'connecting';
-        dbg('handshake ok → TCP', host, portNum, 'charset=', charset);
+        dbg('handshake ok → TCP', host, portNum);
 
         tcp = net.createConnection({ host, port: portNum }, () => {
             phase = 'live';

@@ -3,6 +3,7 @@
  */
 import type { BrPr } from './types/brPr.js';
 import { matchPromptRules, type PromptRule } from './promptMatchPolicy.js';
+import { parseMyGiftTaskMeta } from './mud-mygift-meta-parse.js';
 
 export const ALH_PAT = /(?:\x1b)?\[1;31mask lao/i;
 export const ALH_CMD = 'ask lao about here';
@@ -51,7 +52,7 @@ export const QUIT_ABANDON_PAT = /(?:\x1b)?\[1;37m您选择了放弃该账号/;
 /** 王者归来主程序启动完毕；仅本 TCP 段匹配（见 snapBr reloadPage），避免整缓冲长期命中反复刷新 */
 const NT_BOOT_GAP = '(?:\\x1b\\[[0-9;]*m|\\s)*';
 export const NT_ULTIMATE_BOOT_PAT = new RegExp(
-    `王者归来${NT_BOOT_GAP}\\(${NT_BOOT_GAP}NT\\.ULTIMATE${NT_BOOT_GAP}\\)${NT_BOOT_GAP}启动完毕`
+    `雪海飘香${NT_BOOT_GAP}\\(${NT_BOOT_GAP}NT\\.ULTIMATE${NT_BOOT_GAP}\\)${NT_BOOT_GAP}启动完毕`
 );
 
 const CX_BUF0 = '^(?:\\x1b\\[[0-9;]*m)*这个角色已经存在[，,]';
@@ -69,13 +70,8 @@ export const Q_DET_PAT = /(即将开始检测你的客户端)|(detect)/i;
 const XS_PAT = /(?:\x1b)?\[1;32m姓氏/;
 const MZ_PAT = /(?:\x1b)?\[1;33m名字/;
 const QM_PAT = /(?:\x1b)?\[2;37;0m请输入您的全名\(/;
-const PS_PAT = /(?:\x1b)?\[2;37;0m(?:请设定您的管|请再输入一次您的管)/;
-const PS_1 = /(?:\x1b)?\[2;37;0m请设定您的管/;
-const PS_2 = /(?:\x1b)?\[2;37;0m请再输入一次您的管/;
-const PN_PAT =
-    /(?:\x1b)?\[[0-9;]*m(?:请输入你的普|请再输入一次您的(?:密|密码))/;
-const PN_1 = /(?:\x1b)?\[[0-9;]*m请输入你的普/;
-const PN_2 = /(?:\x1b)?\[[0-9;]*m请再输入一次您的(?:密|密码)/;
+const PS_1 = /(?:\x1b)?\[1;33m管理密码/;
+const PN_1 = /(?:\x1b)?\[1;37m普通密码/;
 /**
  * 需要“再次匹配触发”的提示统一走规则表，后续新增同类按钮只需加一行配置。
  */
@@ -95,12 +91,10 @@ const REMATCH_PROMPT_RULES: Record<
 const CARD_ORD = [
     { re: QM_PAT, key: 'qmP' as const },
     { re: MZ_PAT, key: 'mzP' as const },
-    { re: XS_PAT, key: 'xsP' as const },
-    { re: PS_PAT, key: 'psP' as const },
-    { re: PN_PAT, key: 'pnP' as const }
+    { re: XS_PAT, key: 'xsP' as const }
 ] as const;
 
-type CardKey = (typeof CARD_ORD)[number]['key'];
+type CardKey = (typeof CARD_ORD)[number]['key'] | 'psP' | 'pnP';
 type CardFlags = Record<CardKey, boolean>;
 
 const CARD_NONE: CardFlags = {
@@ -122,10 +116,20 @@ function lastIdx(re: RegExp, s: string): number {
 }
 
 function resolveCard(bufFull: string): CardFlags {
-    const scored = CARD_ORD.map((d) => ({
+    const scored: { key: CardKey; i: number }[] = CARD_ORD.map((d) => ({
         key: d.key,
         i: lastIdx(d.re, bufFull)
     }));
+    const iPs = Math.max(
+        lastIdx(PS_1, bufFull),
+        lastIdx(/(?:\x1b)?\[1;33;0m请再输入一次您的管/, bufFull)
+    );
+    scored.push({ key: 'psP', i: iPs });
+    const iPn = Math.max(
+        lastIdx(PN_1, bufFull),
+        lastIdx(/(?:\x1b)?\[1;37;0m请再输入一次您的普/, bufFull)
+    );
+    scored.push({ key: 'pnP', i: iPn });
     const max = Math.max(-1, ...scored.map((x) => x.i));
     if (max < 0) return { ...CARD_NONE };
     const win = scored.find((x) => x.i === max)!;
@@ -134,7 +138,7 @@ function resolveCard(bufFull: string): CardFlags {
 
 function pn2Ready(bufFull: string): boolean {
     const i1 = lastIdx(PN_1, bufFull);
-    const i2 = lastIdx(PN_2, bufFull);
+    const i2 = lastIdx(/(?:\x1b)?\[1;37;0m请再输入一次您的普/, bufFull);
     if (i2 < 0) return false;
     return i1 < 0 || i2 > i1;
 }
@@ -148,15 +152,15 @@ export function ynOk(chunk: string): boolean {
     return ynWithAnsi.test(chunk);
 }
 
+/** 性别：绿 `[1;32m` + `m` 为男，洋红 `[1;35m` + `f` 为女（可与无 ESC 的裸 `[` 形式并存） */
+const MF_M_PAT = /(?:\x1b)?\[1;32mm/;
+const MF_F_PAT = /(?:\x1b)?\[1;35mf/;
+
 export function mfOk(chunk: string): boolean {
-    const ansi = '(?:\\x1b\\[[0-9;]*m)*';
-    const mfWithAnsi = new RegExp(
-        `(?:男性|女性)[^\\r\\n]*?\\(${ansi}m${ansi}\\)[^\\r\\n]*?(?:或|/|、|,|，)[^\\r\\n]*?\\(${ansi}f${ansi}\\)|\\(${ansi}m${ansi}\\)[^\\r\\n]*?\\(${ansi}f${ansi}\\)|${ansi}m${ansi}\\/${ansi}f`,
-        'i'
-    );
-    return mfWithAnsi.test(chunk);
+    return MF_M_PAT.test(chunk) || MF_F_PAT.test(chunk);
 }
 
+/** 站点「Email/register」提示；勿在房间 long 里对字面 register 使用 HIC（会与 regroom 等冲突） */
 export function emOk(buf: string): boolean {
     return /\[1;36mregister/i.test(buf);
 }
@@ -181,20 +185,54 @@ export function mRc(raw: string): boolean {
     return RC_PAT.test(raw);
 }
 
+/** 仅在此尾部窗口内匹配登录提示，避免整缓冲里「最早一次」密码提示在 MOTD/进房后仍占位导致 lgPwdL 恒真 */
+const LOGIN_PROMPT_TAIL = 32000;
+
+function bufTailForLoginPrompts(bufFull: string): string {
+    return bufFull.length > LOGIN_PROMPT_TAIL ? bufFull.slice(-LOGIN_PROMPT_TAIL) : bufFull;
+}
+
+/**
+ * 登录/建号相关提示若在「仅 MOTD 等大段」的 TCP 包中，decodedChunk 不含提示行会导致全 false，
+ * 菜单区（Email、发送 new、自动上行账号等）被错误关闭。按 bufFull 内最后一次出现的提示判定当前阶段。
+ */
+function loginPromptFlags(
+    decodedChunk: string,
+    bufFull: string
+): { lgPwdL: boolean; enNmL: boolean; qNew: boolean; qDet: boolean } {
+    const yn = ynOk(decodedChunk);
+    const mf = mfOk(bufFull);
+    if (yn || mf) {
+        return { lgPwdL: false, enNmL: false, qNew: false, qDet: false };
+    }
+    const tail = bufTailForLoginPrompts(bufFull);
+    const iPwd = lastIdx(LG_PWD_PAT, tail);
+    const iEn = lastIdx(EN_NM_PAT, tail);
+    const iNew = lastIdx(Q_NEW_PAT, tail);
+    const iDet = lastIdx(Q_DET_PAT, tail);
+    const max = Math.max(-1, iPwd, iEn, iNew, iDet);
+    return {
+        lgPwdL: max === iPwd && iPwd >= 0,
+        enNmL: max === iEn && iEn >= 0,
+        qNew: max === iNew && iNew >= 0,
+        qDet: max === iDet && iDet >= 0
+    };
+}
+
 export function snapBr(decodedChunk: string, bufFull: string): BrPr {
     const yn = ynOk(decodedChunk);
-    const mf = mfOk(decodedChunk);
+    const mf = mfOk(bufFull);
     const card = resolveCard(bufFull);
-    const psBoth = PS_1.test(bufFull) && PS_2.test(bufFull);
+    const psBoth =
+        PS_1.test(bufFull) &&
+        /(?:\x1b)?\[1;33;0m请再输入一次您的管/.test(bufFull);
     const pn2 = pn2Ready(bufFull);
 
-    const lgPwdL = LG_PWD_PAT.test(decodedChunk);
-    const enNmL = EN_NM_PAT.test(decodedChunk);
-    const qNew = !yn && !mf && Q_NEW_PAT.test(decodedChunk);
-    const qDet = !yn && !mf && Q_DET_PAT.test(decodedChunk);
+    const { lgPwdL, enNmL, qNew, qDet } = loginPromptFlags(decodedChunk, bufFull);
     const rematchPrompt = matchPromptRules(bufFull, REMATCH_PROMPT_RULES);
     /** 仅当本段下行含启动完毕提示时为 true，供前端整页刷新 */
     const reloadPage = NT_ULTIMATE_BOOT_PAT.test(decodedChunk);
+    const myGiftTask = parseMyGiftTaskMeta(bufFull);
 
     return {
         yn,
@@ -227,6 +265,7 @@ export function snapBr(decodedChunk: string, bufFull: string): BrPr {
         enNmL,
         qNew,
         qDet,
-        reloadPage
+        reloadPage,
+        ...(myGiftTask ? { myGiftTask } : {})
     };
 }
