@@ -1,7 +1,7 @@
 /**
  * MUD 下行匹配与桥接提示快照（仅 nt7_node 后端运行；前端不打包）。
  */
-import type { BrPr } from './types/brPr.js';
+import type { BrAuxTaskFab, BrPrGroupedSnapshot } from './types/brPr.js';
 import { matchPromptRules, type PromptRule } from './promptMatchPolicy.js';
 import { parseMyGiftTaskMeta } from './mud-mygift-meta-parse.js';
 
@@ -49,6 +49,11 @@ export const CE_CMD = 'closeeye';
 export const HB_PAT = /(?:\x1b)?\[1;36m老村长嘱咐道：/;
 export const HB_CMD = 'walk 村口';
 export const QUIT_ABANDON_PAT = /(?:\x1b)?\[1;37m您选择了放弃该账号/;
+/**
+ * 白字「您选择了放…」（如放弃流程）；与 NT 启动完毕同类，触发前端整页刷新。
+ * 仅用本 TCP 段 `decodedChunk` 匹配，避免整缓冲长期命中。
+ */
+export const RELOAD_PAGE_CHOOSE_FANG_PAT = /(?:\x1b)?\[1;37m您选择了放/;
 /** 王者归来主程序启动完毕；仅本 TCP 段匹配（见 snapBr reloadPage），避免整缓冲长期命中反复刷新 */
 const NT_BOOT_GAP = '(?:\\x1b\\[[0-9;]*m|\\s)*';
 export const NT_ULTIMATE_BOOT_PAT = new RegExp(
@@ -66,6 +71,26 @@ export const LG_PWD_PAT = /(请输入密码)|(\bpassword\b)/i;
 export const EN_NM_PAT = /((你|您)的英文名)|(\bname\b)/i;
 export const Q_NEW_PAT = /(人物请输入new。)|(\bnew\b)/i;
 export const Q_DET_PAT = /(即将开始检测你的客户端)|(detect)/i;
+
+/**
+ * `用` + `[1;37m` + 英文名校验 + `[2;37;0m这个名字将`（英文名 `[A-Za-z]+`）
+ */
+export const CREATE_USER_NAME_PAT =
+    /用(?:\x1b)?\[1;37m([A-Za-z]+)(?:\x1b)?\[2;37;0m这个名字将/;
+
+/**
+ * `N、输入指令 … [32m<command> … [2;37;0m`
+ * - N 前后可有英文前后缀
+ * - command 支持单词或双词（如 `map` / `help start`）
+ */
+export const AUX_TASK_HELP_START_RE =
+    /】：[A-Za-z]*(\d+)[A-Za-z]*、输入指令[\s\S]{0,600}?(?:\x1b)?\[[0-9;]*32m([a-z]+(?:\s+[a-z]+)?)[\s\S]{0,50}?(?:\x1b)?\[2;37;0m/i;
+
+export function parseAuxTaskHelpStartFab(bufFull: string): BrAuxTaskFab | undefined {
+    const m = bufFull.match(AUX_TASK_HELP_START_RE);
+    if (!m?.[1] || !m?.[2]) return undefined;
+    return { n: m[1], cmd: m[2].trim().toLowerCase() };
+}
 
 const XS_PAT = /(?:\x1b)?\[1;32m姓氏/;
 const MZ_PAT = /(?:\x1b)?\[1;33m名字/;
@@ -160,9 +185,10 @@ export function mfOk(chunk: string): boolean {
     return MF_M_PAT.test(chunk) || MF_F_PAT.test(chunk);
 }
 
-/** 站点「Email/register」提示；勿在房间 long 里对字面 register 使用 HIC（会与 regroom 等冲突） */
+/** 注册 Email 提示：与 nt7_utf8 regroom `HIW " reg …"`（`[1;37m reg`）一致；前端 `BrPr.em` 为真时显示 Email 按钮 */
+export const EM_PAT = /(?:\x1b)?\[1;37m\s+reg\b/;
 export function emOk(buf: string): boolean {
-    return /\[1;36mregister/i.test(buf);
+    return EM_PAT.test(buf);
 }
 
 export function chSelOk(buf: string): boolean {
@@ -219,7 +245,7 @@ function loginPromptFlags(
     };
 }
 
-export function snapBr(decodedChunk: string, bufFull: string): BrPr {
+export function snapBr(decodedChunk: string, bufFull: string): BrPrGroupedSnapshot {
     const yn = ynOk(decodedChunk);
     const mf = mfOk(bufFull);
     const card = resolveCard(bufFull);
@@ -230,42 +256,56 @@ export function snapBr(decodedChunk: string, bufFull: string): BrPr {
 
     const { lgPwdL, enNmL, qNew, qDet } = loginPromptFlags(decodedChunk, bufFull);
     const rematchPrompt = matchPromptRules(bufFull, REMATCH_PROMPT_RULES);
-    /** 仅当本段下行含启动完毕提示时为 true，供前端整页刷新 */
-    const reloadPage = NT_ULTIMATE_BOOT_PAT.test(decodedChunk);
+    /** 本段含 NT 启动完毕或「您选择了放…」时为 true，供前端整页刷新 */
+    const reloadPage =
+        NT_ULTIMATE_BOOT_PAT.test(decodedChunk) || RELOAD_PAGE_CHOOSE_FANG_PAT.test(decodedChunk);
     const myGiftTask = parseMyGiftTaskMeta(bufFull);
+    const auxTaskFab = parseAuxTaskHelpStartFab(bufFull);
 
+    const em = emOk(bufFull);
+    const chSel = chSelOk(bufFull);
     return {
-        yn,
-        mf,
-        em: emOk(bufFull),
-        chSel: chSelOk(bufFull),
-        alh: ALH_PAT.test(bufFull),
-        wash: WASH_PAT.test(bufFull),
-        baiShi: rematchPrompt.baiShi,
-        baiWuBo: rematchPrompt.baiWuBo,
-        zhaoCz: rematchPrompt.zhaoCz || ZHAOCZ_PLAIN.test(bufFull),
-        zhunCc: rematchPrompt.zhunCc || ZHUNCC_PLAIN.test(bufFull),
-        cfLv: rematchPrompt.cfLv,
-        ky: KY_PAT.test(bufFull),
-        d14: rematchPrompt.d14,
-        cEye: CE_PAT.test(bufFull),
-        lHb: HB_PAT.test(bufFull),
-        cxPwd: mCx(bufFull),
-        pgM: pgTailOk(bufFull),
-        quitAbd: QUIT_ABANDON_PAT.test(bufFull),
-        rcD: mRc(bufFull),
-        xsP: card.xsP,
-        mzP: card.mzP,
-        qmP: card.qmP,
-        psP: card.psP,
-        pnP: card.pnP,
-        psBoth,
-        pn2,
-        lgPwdL,
-        enNmL,
-        qNew,
-        qDet,
-        reloadPage,
-        ...(myGiftTask ? { myGiftTask } : {})
+        login: {
+            yn,
+            mf,
+            em,
+            chSel,
+            lgPwdL,
+            enNmL,
+            qNew,
+            qDet
+        },
+        card: {
+            xsP: card.xsP,
+            mzP: card.mzP,
+            qmP: card.qmP,
+            psP: card.psP,
+            pnP: card.pnP,
+            psBoth,
+            pn2
+        },
+        guide: {
+            alh: ALH_PAT.test(bufFull),
+            wash: WASH_PAT.test(bufFull),
+            baiShi: rematchPrompt.baiShi,
+            baiWuBo: rematchPrompt.baiWuBo,
+            zhaoCz: rematchPrompt.zhaoCz || ZHAOCZ_PLAIN.test(bufFull),
+            zhunCc: rematchPrompt.zhunCc || ZHUNCC_PLAIN.test(bufFull),
+            cfLv: rematchPrompt.cfLv,
+            ky: KY_PAT.test(bufFull),
+            d14: rematchPrompt.d14,
+            cEye: CE_PAT.test(bufFull),
+            lHb: HB_PAT.test(bufFull)
+        },
+        sys: {
+            cxPwd: mCx(bufFull),
+            pgM: pgTailOk(bufFull),
+            quitAbd: QUIT_ABANDON_PAT.test(bufFull),
+            rcD: mRc(bufFull),
+            reloadPage
+        },
+        ...(myGiftTask ? { myGiftTask } : {}),
+        ...(auxTaskFab ? { auxTaskFab } : {}),
+        ...(CREATE_USER_NAME_PAT.test(bufFull) ? { createUser: 1 as const } : {})
     };
 }

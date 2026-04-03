@@ -1,7 +1,8 @@
 /**
  * 每条 TCP 下行后生成 vsmud-control JSON（与 vsmud_vue 前端约定一致）。
  */
-import type { BrPr } from './types/brPr.js';
+import type { BrPrWire } from './types/brPr.js';
+import { pruneBrPrForWire } from './mud-br-pr-wire.js';
 import { snapBr } from './mudBridgeDownlinkCore.js';
 import { parseExitDirsFromMudBuffer } from './mud-exit-dirs-parse.js';
 import { parseCurrentRoomNameFromMudBuffer } from './mud-room-title-parse.js';
@@ -29,8 +30,8 @@ export interface BrCtlPayload {
     /** 本 TCP 段经 UTF-8 解码、剔除 VSMUD_MYGIFT 行后再编码的 Base64，供终端展示 */
     mudText: string;
     exits: { sk: string[] | null };
-    roomTitle: { nm: string | null };
-    prompts: BrPr;
+    roomTitle: { curRoom: string | null };
+    prompts: BrPrWire;
 }
 
 export function mkDlProc() {
@@ -52,8 +53,8 @@ export function mkDlProc() {
                 mudTextEnc: 'base64',
                 mudText: encChunk(displayDecoded).toString('base64'),
                 exits: { sk: parseExitDirsFromMudBuffer(bufFull) },
-                roomTitle: { nm: parseCurrentRoomNameFromMudBuffer(bufFull) },
-                prompts: snapBr(decoded, bufFull)
+                roomTitle: { curRoom: parseCurrentRoomNameFromMudBuffer(bufFull) },
+                prompts: pruneBrPrForWire(snapBr(decoded, bufFull))
             };
         },
 

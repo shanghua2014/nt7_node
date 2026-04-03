@@ -127,7 +127,7 @@ wss.on('connection', (ws) => {
             try {
                 if (!proc) return;
                 const ctl = proc.push(chunk);
-                const cfLvNow = Boolean(ctl.prompts?.cfLv);
+                const cfLvNow = ctl.prompts?.guide?.cfLv === true;
                 if (lastCfLv === null || cfLvNow !== lastCfLv) {
                     dbg(
                         'prompts.cfLv changed:',
